@@ -3,8 +3,42 @@ const express = require('express');
 const cors = require('cors');
 const app = express();
 const bodyParser = require('body-parser');
-const dns = require('dns');
-let tempUrl;
+const validUrl = require('valid-url');
+const crypto = require("crypto");
+
+
+// Mongoose decleration section
+let mongoose=require('mongoose');
+const { stringify } = require('querystring');
+
+mongoose.connect('mongodb+srv://mars77:1234@cluster0.xbzwd5f.mongodb.net/mongodb-fcc?retryWrites=true&w=majority', { useNewUrlParser: true, useUnifiedTopology: true });
+
+let urlSchema = new mongoose.Schema({
+  fullUrl: String,
+  shortUrl: String,
+})
+
+let UrlData = new mongoose.model('Urldata',urlSchema);
+
+function done(err) {
+  if (err) console.log(err)
+}
+
+const createUrlEntry = (array) => {
+  UrlData.create(array,(err,data)=>{
+    if (err) return done(err)
+    return data
+  })
+};
+
+const findOneByUrl = async (url) => {
+  try {
+   const urlFind = await UrlData.findOne({shortUrl: url})
+  return urlFind;
+  } catch(err) {
+    done(err);
+  }
+};
 
 // Basic Configuration
 const port = process.env.PORT || 3000;
@@ -25,22 +59,22 @@ app.get('/api/hello', function(req, res) {
 });
 
 
-app.post('/api/shorturl',function(req,res){
-  dns.lookup(req.body.url,(error,address)=>{
-    if (error) {
-      res.json({error:'invalid url'})
-      tempUrl = 0;
-    }
-    else {
-      tempUrl = address.split('.').slice(2).join('')
+app.post('/api/shorturl',async function(req,res){
+  if (validUrl.isHttpUri(req.body.url)||validUrl.isHttpsUri(req.body.url)) {
+      let tempUrl = crypto.randomBytes(3).toString('hex');
+      if (! await findOneByUrl(tempUrl)) { 
+      createUrlEntry({'fullUrl':req.body.url,'shortUrl':tempUrl});
+      }
       res.json({'original_url':req.body.url,'short_url':tempUrl});
-    }})
-    
+    }
+  else res.json({error:'invalid url'})
   })
     
 
-app.get('/api/shorturl/'+tempUrl,(res,req)=>{
-  res.send('Your Short URL:' +tempUrl)
+
+app.get('/api/shorturl/:code', async (req,res)=>{
+  let tempUrl = await findOneByUrl(req.params.code)
+  res.redirect(tempUrl.fullUrl);
 })
 
 
